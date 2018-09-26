@@ -28,7 +28,7 @@ def als_init():
 
 def init_all():
     led_init()
-    #piezo_init()
+    piezo_init()
     als_init()
     return
 
@@ -47,7 +47,7 @@ def deinit_all():
 def init_timer():
     global timer
     timer = Timer(-1)
-    timer.init(period=100, mode=Timer.PERIODIC,callback=timer_cb)
+    timer.init(period=1, mode=Timer.PERIODIC,callback=timer_cb)
     return timer
 
 def deinit_timer():
@@ -55,14 +55,22 @@ def deinit_timer():
     timer.deinit()
     return
 
+def read_als():
+    global als
+    global duty
+    val = als.read()
+    duty = val
+
 def timer_cb(tim):
     global led
-    global als
-    val = als.read()
-    led.duty(val)
+    global duty
+    #global als
+    #val = als.read()
+    led.duty(duty)
     return
 
 piezo = 0
 led = 0
 adc = 0
 timer = 0
+duty = 512

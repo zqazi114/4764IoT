@@ -6,11 +6,10 @@ def setup_switch():
     global switch
     global test_led
     test_led = Pin(2,Pin.OUT)
-    switch = Pin(14, Pin.IN)
-    switch.irq(handler=switch_cb,trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING, hard=True)
-    #switch.irq(trigger=Pin.IRQ_RISING, handler=switch_cb)
     test_led.on()
     pwm_led.init_all()
+    switch = Pin(14, Pin.IN)
+    switch.irq(handler=switch_cb,trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING, hard=True)
     timer = pwm_led.init_timer()
     return
 
@@ -21,10 +20,11 @@ def switch_cb(pin):
     global timer
     if switch.value() == 1:
         test_led.off()
-        timer = pwm_led.init_timer()
+        pwm_led.read_als()
+        #timer = pwm_led.init_timer()
     else:
         test_led.on()
-        pwm_led.deinit_timer()
+        #pwm_led.deinit_timer()
     enable_irq(state)
     return
 

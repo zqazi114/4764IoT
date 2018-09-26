@@ -5,19 +5,23 @@
 import led_blink
 import pwm_led
 import interrupts
+from lab2 import Lab2
+from machine import Timer
 
 # Main
 def main():
-    #led_blink.blink_LED()
-    #led_blink.SOS_LED()
-    led_blink.blink_LED_PWM()
+    #Checkpoint 1
+    #led_blink.blink_LED_PWM()
     
-    #pwm_led.led_test()
-    #pwm_led.init_timer()
-    #pwm_led.timer_cb(1)
+    #Checkpoint 2
     #pwm_led.init_all()
     
-    interrupts.setup_switch()
+    #Checkpoint 3
+    #interrupts.setup_switch()
+    
+    #Alternate
+    devices = [True, True, True, True] #[test_led, led, piezo, als]
+    lab2 = Lab2(devices)
     
     return
 
