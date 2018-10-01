@@ -25,7 +25,6 @@ IMU_ADDR = 0x53
 IMU_REG = 0x32
 
 DEBOUNCE_TIME = 1000
-DIGITS = (0, 3, 6, 9, 12, 15)
 
 class Lab3:
     def __init__(self):
@@ -61,6 +60,7 @@ class Lab3:
         
         self.button_timer = Timer(1)
         self.button_timer.init(period=10, mode=Timer.PERIODIC,callback=self.button_cb2)
+        #self.switch.irq(handler=self.switch_cb,trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,hard=True)
     
         # OLED
         self.i2c = I2C(scl=Pin(SCL), sda=Pin(SDA), freq=100000)
@@ -72,15 +72,20 @@ class Lab3:
         # RTC
         self.mode = 0 # 0: Clock, 1: Set, 2: Alarm
         self.rtc = RTC()
-        date = [2018, 9, 27, 1, 12, 48, 0, 0]
+        date = (2018, 9, 27, 1, 12, 48, 0, 0)
         self.rtc.datetime(date)
         self.current_time = self.rtc.datetime()
         self.current_digit = 0
+        self.current_tiktok = 1
         self.clock_timer = Timer(2)
         self.clock_timer.init(period=1000, mode=Timer.PERIODIC, callback=self.clock_cb)
 
         # Interrupt table
         self.INT_als = False
+        self.INT_switch = False
+        self.INT_oled_a = False
+        self.INT_oled_b = False
+        self.INT_oled_c = False
         self.INT_rtc = False
 
         self.control_timer = Timer(3)
@@ -88,11 +93,10 @@ class Lab3:
 
         # Alarm
         self.alarm_timer = Timer(4)
-        self.alarm_duration = 0
 
         # Globals
         self.globals = Globals()
-        
+
         # test LED
         self.test_led = Pin(TEST_LED, Pin.OUT)
         self.test_led.off()
@@ -102,8 +106,7 @@ class Lab3:
 ################ LAB 3 ######################
    
     def print_text(self,text):
-        m = self.mode
-        self.mode = 5
+        self.mode = 3
         self.oled.fill(0)
         self.oled.show()
         for i in range(len(text)):
@@ -118,34 +121,25 @@ class Lab3:
         self.oled.show()
         time.sleep_ms(1000)
         self.oled.show()
-        self.mode = m
+        self.mode = 0
         return
 
-    def set_alarm(self):
-        self.alarm_timer.init(period=1000, mode=Timer.PERIODIC, callback=self.alarm_cb)
+    def set_alarm(self, duration):
+        self.alarm_timer.init(period=duration*1000, mode=Timer.ONE_SHOT, callback=self.alarm_cb)
+        self.test_led2.on()
         return
 
     def alarm_cb(self, timer):
-        self.alarm_duration = self.alarm_duration - 1
-        if self.alarm_duration <= 0:
-            #self.mode = 3
-            self.alarm_timer.deinit()
-            self.print_text("WAKE UP!!!")
+        self.mode = 2
+        self.print_text("WAKE UP!!!")
+        self.mode = 0
         return
-
-    def format_alarm(self):
-        s = self.alarm_duration % 60
-        m = (self.alarm_duration // 60) % 60
-        h = (self.alarm_duration // 3600) % 60
-        alarmStr = "{:02d}:{:02d}:{:02d}".format(h, m, s)
-        return alarmStr
 
     def adjust_brightness(self,brightness):
         b_arr = bytearray([0x80, 0x81])
-        self.i2c.writeto(0x3c, b_arr)
+        self.i2c.writeto(OLED_ADDR, b_arr)
         b_arr = bytearray([0x80, brightness])
-        self.i2c.writeto(0x3c, b_arr)
-        self.test_led.on()
+        self.i2c.writeto(OLED_ADDR, b_arr)
         return
     
     def scroll_text(self, direction):
@@ -158,10 +152,6 @@ class Lab3:
 
     def als_cb(self, timer):
         brightness = self.als.read()
-        if brightness <= 512:
-            brightness = 10
-        else:
-            brightness = 1000
         brightness = (brightness*255)//1024
         self.adjust_brightness(brightness)
         return
@@ -180,31 +170,16 @@ class Lab3:
         elif self.mode == 1:
             self.oled.fill(1)
             self.oled.show()
-            date = self.current_time
+            date = (2018, 9, 27, 1, 12, 48, 0, 0)
             dateStr = "{}/{:02d}".format(date[1], date[2])
             timeStr = "{:02d}:{:02d}:{:02d}:{:02d}".format(date[3], date[4], date[5], date[6])
             self.oled.text(dateStr + " " + timeStr, 0, 20, 0)
             self.oled.show()
             
-            self.draw_cursor()
-        elif self.mode == 2:
-            text = "Alarm"
-            self.oled.fill(0)
-            self.oled.show()
-            self.oled.text(text, 0, 0, 1)
-            self.oled.show()
-            alarmStr = self.format_alarm()
-            self.oled.text(alarmStr, 0, 20, 1)
-            self.oled.show()
+            self.draw_cursor(self.current_digit)
+        # ???
         elif self.mode == 3:
-            text = "Alarm"
-            self.oled.fill(0)
-            self.oled.show()
-            self.oled.text(text, 0, 0, 1)
-            self.oled.show()
-            alarmStr = self.format_alarm()
-            self.oled.text(alarmStr, 0, 20, 1)
-            self.oled.show()
+            a = 1
         # IMU scroll
         elif self.mode == 4:
             self.ticks = self.ticks + 1
@@ -239,22 +214,36 @@ class Lab3:
             self.globals.column = column
         return
     
-    def draw_cursor(self):
-        d = DIGITS[self.current_digit]
-        for i in range(8):
-            for j in range(8):
-                x = d*8 + i
+    def draw_cursor(self, digit):
+        if self.current_tiktok == 1:
+            self.current_tiktok = 0
+        else:
+            self.current_tiktok = 1
+        for i in range(10):
+            for j in range(10):
+                x = digit*10 + i
                 y = 20 + j
-                self.oled.pixel(x,y,0)
+                self.oled.pixel(x,y,0)#self.current_tiktok)
         self.oled.show()
         return
 
-    def increment_digit(self):
-        #date = (2018, 9, 27, 1, 12, 48, 0, 0)
-        d = self.current_digit + 1
-        t = self.current_time
-        self.current_time = [t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]]
-        self.current_time[d] = t[d] + 1
+    def control_cb(self, timer):
+        if self.mode == 0:
+            if self.INT_oled_a:# and self.INT_oled_b and ~self.INT_oled_c:
+                self.mode = 1
+                self.current_time = self.rtc.datetime()
+            elif self.INT_oled_a and self.INT_oled_c:
+                self.mode = 2
+        elif self.mode == 1:
+            if self.INT_oled_a:
+                self.mode = 0
+            elif self.INT_als:#self.INT_oled_b:
+                self.current_digit = self.current_digit + 1
+            elif self.INT_oled_c:
+                self.current_digit = self.current_digit - 1
+        elif self.mode == 2:
+            if self.INT_oled_a:
+                self.mode = 0
         return
 
 ################ BUTTONS ######################
@@ -265,36 +254,83 @@ class Lab3:
             self.switch_pending = True
             self.switch_ts = time.ticks_ms()
             self.mode = (self.mode + 1) % 5
-            if self.mode == 1:
-                self.current_time = self.rtc.datetime()
-            elif self.mode == 2:
-                self.rtc.datetime(self.current_time)
-            elif self.mode == 3:
-                self.set_alarm()
     
-        if self.oled_a.value() == 0 and (t - self.oled_a_ts) > DEBOUNCE_TIME:
+        if self.oled_a.value() == 1 and (t - self.oled_a_ts) > DEBOUNCE_TIME:
             self.oled_a_pending = True
             self.oled_a_ts = time.ticks_ms()
 
-        if self.oled_c.value() == 0 and (t - self.oled_c_ts) > DEBOUNCE_TIME:
+        #if self.oled_b.value() == 1 and (t - self.oled_b_ts) > DEBOUNCE_TIME:
+        #    self.oled_b_pending = True
+        #    self.oled_b_ts = time.ticks_ms()
+
+        if self.oled_c.value() == 1 and (t - self.oled_c_ts) > DEBOUNCE_TIME:
             self.oled_c_pending = True
             self.oled_c_ts = time.ticks_ms()
 
         return
 
-    def control_cb(self, timer):
-        if self.mode == 1:
-            if self.oled_a_pending:
+    def button_cb(self, timer):
+        if self.switch_pending:
+            self.debounce(SWITCH)
+        elif self.switch_prev != self.switch.value(): 
+            self.switch_prev = self.switch.value()
+            self.switch_pending = True
+            self.switch_ts = time.ticks_ms()
+            self.debounce(SWITCH)
+        
+        if self.oled_a_pending:
+            self.debounce(OLED_A)
+        elif self.oled_a_prev != self.oled_a.value(): 
+            self.oled_a_prev = self.oled_a.value()
+            self.oled_a_pending = True
+            self.debounce(OLED_A)
+        return
+
+    def debounce(self, switch):
+        if switch == SWITCH:
+            if time.ticks_diff(time.ticks_ms(),self.switch_ts) > DEBOUNCE_TIME:
+                self.switch_pending = False
+                if self.switch_prev == self.switch.value():
+                    if self.switch.value() == 0:
+                        #self.INT_als = True
+                        self.test_led.on()
+                    else:
+                        #self.INT_als = False
+                        self.test_led.off()
+        elif switch == OLED_A:
+            if time.ticks_diff(time.ticks_ms(),self.oled_a_ts) > DEBOUNCE_TIME:
                 self.oled_a_pending = False
-                self.current_digit = self.current_digit + 1
-            elif self.oled_c_pending:
-                self.oled_c_pending = False
-                #self.current_digit = self.current_digit - 1
-                self.increment_digit()
-        elif self.mode == 2:
-            if self.oled_c_pending:
-                self.oled_c_pending = False
-                self.alarm_duration = self.alarm_duration + 1
+                if self.oled_a_prev == self.oled_a.value():
+                    if self.oled_a.value() == 0:
+                        self.INT_oled_a = True
+                        #self.test_led2.on()
+                    else:
+                        self.INT_oled_a = False
+                        #self.test_led2.off()
+        elif switch == OLED_B:
+            if time.ticks_diff(time.ticks_ms(),self.oled_b_ts) > DEBOUNCE_TIME:
+                self.oled_b_ts = time.ticks_ms()
+                if self.oled_b_prev == self.oled_b.value():
+                    if self.oled_b.value() == 0:
+                        self.INT_oled_b = True
+                        self.test_led.on()
+                    else:
+                        self.INT_oled_b = False
+                        self.test_led.off()
+                else:
+                    self.oled_b_prev = self.oled_b.value()
+        elif switch == OLED_C:
+            if time.ticks_diff(time.ticks_ms(),self.oled_c_ts) > 50:
+                self.oled_c_ts = time.ticks_ms()
+                if self.oled_c_prev == self.oled_c.value():
+                    if self.oled_c.value() == 0:
+                        self.INT_oled_c = True
+                        self.test_led.on()
+                    else:
+                        self.INT_oled_c = False
+                        self.test_led.off()
+                else:
+                    self.oled_c_prev = self.oled_c.value()
         return
 
 ################ INTERRUPTS ##################
