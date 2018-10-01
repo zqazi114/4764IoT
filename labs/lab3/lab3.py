@@ -67,6 +67,8 @@ class Lab3:
         self.i2c = I2C(scl=Pin(SCL), sda=Pin(SDA), freq=100000)
         self.oled = ssd1306.SSD1306_I2C(128, 32, self.i2c)
         self.oled_brightness = 0.5 
+        self.oled_direction = 0
+        self.ticks = 0
 
         # RTC
         self.mode = 0 # 0: Clock, 1: Set, 2: Alarm
@@ -93,26 +95,16 @@ class Lab3:
         # Alarm
         self.alarm_timer = Timer(4)
 
-        # IMU
-        self.init_imu()
-        self.imu_timer = Timer(5)
-        self.imu_timer.init(period=15000, mode=Timer.ONE_SHOT, callback=self.imu_cb)
-        self.imu_buf = bytearray(6)
-        self.x_val = 0
-        self.y_val = 0
-        self.z_val = 0
-
         # test LED
         self.test_led = Pin(TEST_LED, Pin.OUT)
         self.test_led.off()
-        self.test_led2 = Pin(TEST_LED2, Pin.OUT)
-        self.test_led2.off()
-
+        
         return
 
 ################ LAB 3 ######################
    
     def print_text(self,text):
+        self.mode = 3
         self.oled.fill(0)
         self.oled.show()
         for i in range(len(text)):
@@ -127,6 +119,7 @@ class Lab3:
         self.oled.show()
         time.sleep_ms(1000)
         self.oled.show()
+        self.mode = 0
         return
 
     def set_alarm(self, duration):
@@ -147,50 +140,11 @@ class Lab3:
         self.i2c.writeto(OLED_ADDR, b_arr)
         return
     
-    def imu_cb(self, timer):
-        #self.x_val = self.imu_x() 
-        #self.y_val = self.imu_y() 
-        #self.z_val = self.imu_z() 
-        text = "{} {} {}".format(x)
-        #self.mode = 3
-        #self.oled.text(text, 0, 0)
-        #self.oled.show()
-        return
-
     def scroll_text(self, direction):
-        a = 1
+        self.oled_direction = direction
+        self.ticks = 0
+        self.mode = 4
         return
-
-    def init_imu(self):
-        b = bytearray(1)
-        b[0] = 0
-        self.i2c.writeto_mem(IMU_ADDR, 0x2d, b)
-        b[0] = 16
-        self.i2c.writeto_mem(IMU_ADDR, 0x2d, b)
-        b[0] = 8
-        self.i2c.writeto_mem(IMU_ADDR, 0x2d, b)
-        return
-
-    def imu_x(self):
-        self.imu_buf = self.i2c.readfrom_mem(IMU_ADDR, IMU_REG, 6)
-        x = (int(self.imu_buf[1]) << 8) | self.imu_buf[0]
-        if x > 32767:
-            x = x - 65536
-        return x
-
-    def imu_y(self):
-        self.imu_buf = self.i2c.readfrom_mem(IMU_ADDR, IMU_REG, 6)
-        y = (int(self.imu_buf[3]) << 8) | self.imu_buf[2]
-        if y > 32767:
-            y = y - 65536
-        return y
-
-    def imu_z(self):
-        self.imu_buf = self.i2c.readfrom_mem(IMU_ADDR, IMU_REG, 6)
-        z = (int(self.imu_buf[5]) << 8) | self.imu_buf[4]
-        if z > 32767:
-            z = z - 65536
-        return z
 
 ################ TIMERS ######################
 
@@ -204,6 +158,7 @@ class Lab3:
         return
     
     def clock_cb(self, timer):
+        # Normal
         if self.mode == 0:
             self.oled.fill(0)
             self.oled.show()
@@ -212,19 +167,53 @@ class Lab3:
             timeStr = "{:02d}:{:02d}:{:02d}:{:02d}".format(date[3], date[4], date[5], date[6])
             self.oled.text(dateStr + " " + timeStr, 0, 20, 1)
             self.oled.show()
+        # Edit
         elif self.mode == 1:
             self.oled.fill(1)
             self.oled.show()
             date = (2018, 9, 27, 1, 12, 48, 0, 0)
-            #date = self.current_time
             dateStr = "{}/{:02d}".format(date[1], date[2])
             timeStr = "{:02d}:{:02d}:{:02d}:{:02d}".format(date[3], date[4], date[5], date[6])
             self.oled.text(dateStr + " " + timeStr, 0, 20, 0)
             self.oled.show()
             
             self.draw_cursor(self.current_digit)
+        # ???
         elif self.mode == 3:
             a = 1
+        # IMU scroll
+        elif self.mode == 4:
+            self.ticks = self.ticks + 1
+            self.oled.fill(0)
+            self.oled.show()
+            date = self.rtc.datetime()
+            dateStr = "{}/{:02d}".format(date[1], date[2])
+            timeStr = "{:02d}:{:02d}:{:02d}:{:02d}".format(date[3], date[4], date[5], date[6])
+            column = 0
+            row = 0
+            if self.oled_direction == 0:
+                row = row + self.ticks*2
+                if row >= 35:
+                    row = -5
+                    self.ticks = 0
+            elif self.oled_direction == 1:
+                row = row - self.ticks*2
+                if row <= -5:
+                    row = 30
+                    self.ticks = 0
+            elif self.oled_direction == 2:
+                column = column + self.ticks*2
+                if column >= 100:
+                    column = -50
+                    self.ticks = 0
+            elif self.oled_direction == 3:
+                column = column - self.ticks*2
+                if column <= -5:
+                    column = 105
+                    self.ticks = 0
+            self.oled.text(dateStr + " " + timeStr, column, row, 1)
+            self.oled.show()
+
         return
     
     def draw_cursor(self, digit):
@@ -257,7 +246,6 @@ class Lab3:
         elif self.mode == 2:
             if self.INT_oled_a:
                 self.mode = 0
-
         return
 
 ################ BUTTONS ######################
