@@ -105,7 +105,7 @@ class Lab4:
             self.oled.text(t, col*8, row*10)
             self.oled.show()
             col = col + 1
-            if col > 9:
+            if col > 15:
                 col = 0
                 row = row + 1
             time.sleep_ms(1)
@@ -139,7 +139,7 @@ class Lab4:
 ################## TWITTER ####################
 
     def send_tweet(self):
-        tweet = "Hi, David Zhuo!"
+        tweet = "The weather is great today!!"
         self.twitter.send_tweet(tweet)
         return
 
