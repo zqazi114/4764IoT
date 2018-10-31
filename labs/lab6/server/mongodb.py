@@ -28,10 +28,10 @@ class Mongo:
         
     def write_test(self):
         post = {"author" : "Zain",
-                        "content" : "Hi botch",
-                        "tags" : ["mongodb", "python", "tutorial"],
-                        "date" : datetime.datetime.utcnow()
-                        }
+                "content" : "Hi botch",
+                "tags" : ["mongodb", "python", "tutorial"],
+                "date" : datetime.datetime.utcnow()
+                }
         
         posts = self.db[Mongo.collName]
         post_id = posts.insert_one(post).inserted_id

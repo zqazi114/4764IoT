@@ -7,16 +7,6 @@ from mongodb import Mongo
 DEFAULTIP = '0.0.0.0'
 DEFAULTPORT = 80
 
-HTTPOK = """HTTP/1.1 200 OK\n
-Content-Type: text/html\n
-\n
-<html><body>ACK</body></html>\n"""
-
-HTTPBAD = """HTTP/1.1 414 NACK\n
-Content-Type: text/html\n
-\n
-<html><body>NACK</body></html>\n"""
-
 DELAY = 100
 
 class Server:
@@ -100,15 +90,48 @@ class Server:
                 if not line or line == b'\r\n':
                     break
             processed = self.process_request(command, parameters)
-            if processed:
-                response = HTTPOK
-            else:
-                response = HTTPBAD
-            cl.send(str.encode(response))
-            cl.close()
+            self.send_HTTP_response(processed, cl)
         self.stop_server() 
         return
 
+    def send_HTTP_response(self, good, sock):
+        if good:
+            response_body = "<html><body>ACK</body></html>\n"
+            response_body_raw = ''.join(response_body)
+            response_proto = 'HTTP/1.1'
+            response_status = '200'
+            response_status_text = 'OK'
+            response_headers = {
+                'Content-Type': 'text/html; encoding=utf8',
+                'Content-Length': len(response_body),
+                'Connection': 'close',
+            }
+
+            response_headers_raw = ''.join('%s: %s\n' % (k, v) for k, v in \
+                                                    response_headers.iteritems())
+        else:
+            response_body = "<html><body>NACK</body></html>\n"
+            response_body_raw = ''.join(response_body)
+            response_proto = 'HTTP/1.1'
+            response_status = '414'
+            response_status_text = 'BADREQUEST'
+            response_headers = {
+                'Content-Type': 'text/html; encoding=utf8',
+                'Content-Length': len(response_body),
+                'Connection': 'close',
+            }
+
+            response_headers_raw = ''.join('%s: %s\n' % (k, v) for k, v in \
+                                                    response_headers.iteritems())
+
+        sock.send('%s %s %s' % (response_proto, response_status, response_status_text))
+        sock.send(response_headers_raw)
+        sock.send('\n')
+        sock.send(response_body_raw)
+
+        sock.close()
+
+        return
 
 ################## PROCESS ####################
     def process_request(self, c, p):

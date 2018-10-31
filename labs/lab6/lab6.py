@@ -40,7 +40,7 @@ class Lab6:
     DEBOUNCE_TIME = 1000
     DIGITS = (0, 3, 6, 9, 12, 15)
     COLUMBIA = ["C", "O", "L", "U", "M", "B", "I", "A"]
-    MAXREADINGS = 100
+    MAXREADINGS = 30
     IMU_INT = 100
     SLEEP = 1000
 
@@ -97,6 +97,7 @@ class Lab6:
         # Character Recognition
         self.charIdx = -1
         self.calibrating = False
+        self.i = 0
         self.readings_x = []
         self.readings_y = []
         self.readings_z = []
@@ -109,23 +110,7 @@ class Lab6:
 
 ################## OLED ####################
 
-    def print_text_slow(self,text):
-        self.oled.fill(0)
-        self.oled.show()
-        row = 0
-        col = 0
-        for i in range(len(text)):
-            t = text[i]
-            self.oled.text(t, col*8, row*10)
-            self.oled.show()
-            col = col + 1
-            if col > 15:
-                col = 0
-                row = row + 1
-            time.sleep_ms(1)
-        return
-    
-    def print_text(self,text,row):
+    def print_text(self,text,row=0):
         for x in range(128):
             for y in range(10):
                 self.oled.pixel(x, y + row*10, 0)
@@ -154,6 +139,14 @@ class Lab6:
             self.readings_x.append(self.x)
             self.readings_y.append(self.y)
             self.readings_z.append(self.z)
+            self.i = self.i + 1
+            if self.i >= Lab6.MAXREADINGS:
+                self.calibrating = False
+                self.i = 0
+                prompt = "Done cal."
+                self.print_text(prompt, 1)
+                print("LOG: {}".format(prompt))
+                self.send_readings_to_server()
         return
 
     def imu_x(self):
@@ -187,7 +180,7 @@ class Lab6:
         lng = self.google.location["location"]["lng"]
 
         text = "lat: {:.2f}lon: {:.2f}".format(lat, lng)
-        self.print_text_slow(text)
+        self.print_text(text)
         return
 
 ################## WEATHER ####################
@@ -200,7 +193,7 @@ class Lab6:
         desc = self.weather.weather["weather"][0]["main"]
         text = "Temp: {}F \nDesc: {}".format(temp, desc)
         print(text)
-        self.print_text_slow(text)
+        self.print_text(text)
         return
 
 ################## TWITTER ####################
@@ -264,16 +257,26 @@ class Lab6:
         print("LOG: communicating to server with uri {}".format(url))
         resp = requests.request(method, url)
         print("LOG: {}{}".format(resp.status_code, resp.reason))
-       
+        
+        x_str = ','.join(str(x) for x in self.readings_x)
+        y_str = ','.join(str(y) for y in self.readings_y)
+        z_str = ','.join(str(z) for z in self.readings_z)
+        url = Lab6.HTTP + Lab6.IP + Lab6.PATH + Lab6.ACCELDATA + 'x=' + x_str + '&y=' + y_str + '&z=' + z_str
+        print("LOG: communicating to server with uri {}".format(url))
+        headers = { 
+                    'Content-Type' : 'text/html; encoding=utf8',
+                    'Content-Length' : '0',
+                  }
+        resp = requests.request(method, url, headers=headers)
+        print("LOG: {}{}".format(resp.status_code, resp.reason))
+        """
         for i in range(len(self.readings_x)):
-            #time.sleep_ms(Lab6.SLEEP)
             reading = str(self.readings_x[i]) + ',' + str(self.readings_y[i]) + ',' + str(self.readings_z[i]) 
             url = Lab6.HTTP + Lab6.IP + Lab6.PATH + Lab6.ACCELDATA + 'val=' + reading
             print("LOG: communicating to server with uri {}".format(url))
             resp = requests.request(method, url)
             print("LOG: {}{}".format(resp.status_code, resp.reason))
-       
-        #time.sleep_ms(Lab6.SLEEP)
+        """
         url = Lab6.HTTP + Lab6.IP + Lab6.PATH + Lab6.ACCELSTOP + 'char=' + Lab6.COLUMBIA[self.charIdx]
         method = "GET"
         print("LOG: communicating to server with uri {}".format(url))

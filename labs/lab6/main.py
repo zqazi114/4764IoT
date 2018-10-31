@@ -2,7 +2,7 @@
 from lab6 import Lab6
 
 def main():
-    loc = "uni"
+    loc = "home"
     l = Lab6(loc)
     mongo = 0#Mongo_HTTP()
     #mongo.write_test()
